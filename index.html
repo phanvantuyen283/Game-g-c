@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Góc Của Em - Phiên Bản Ổn Định</title>
+    <style>
+        /* --- CSS CHUẨN HÓA CHO MOBILE GAME --- */
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background-color: #e0f7fa;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            height: 100vh; margin: 0; padding: 0;
+            overflow: hidden; /* Chặn cuộn trang tuyệt đối */
+            overscroll-behavior: none;
+        }
+
+        /* Màn hình Start */
+        #layer-start {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, #006064, #00838f);
+            z-index: 20;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            color: white;
+        }
+
+        /* Màn hình Game */
+        #layer-game {
+            display: none; width: 100%; height: 100%;
+            flex-direction: column; align-items: center;
+            padding-top: 10px;
+        }
+
+        /* Hộp thoại nhập tên */
+        .input-box {
+            background: white; padding: 25px; border-radius: 15px;
+            text-align: center; width: 80%; max-width: 350px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+        }
+        
+        input {
+            width: 100%; padding: 12px; font-size: 18px;
+            margin: 15px 0; border: 2px solid #00acc1; border-radius: 8px;
+            text-align: center; outline: none;
+        }
+
+        /* Canvas Game */
+        canvas {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            touch-action: none; /* QUAN TRỌNG: Chặn sự kiện cuộn của trình duyệt */
+            max-width: 95%;
+            max-height: 60vh; /* Giới hạn chiều cao để không bị tràn màn hình */
+        }
+
+        /* UI Game Info */
+        .info-bar {
+            display: flex; justify-content: space-between;
+            width: 90%; max-width: 800px;
+            margin-bottom: 5px; color: #006064; font-weight: bold; font-size: 16px;
+        }
+
+        /* Khu vực câu hỏi */
+        #question-area {
+            display: none; /* Ẩn mặc định */
+            width: 95%; max-width: 600px;
+            background: #fff; padding: 10px; border-radius: 12px;
+            margin-top: 10px; border: 1px solid #b2ebf2;
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .btn-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px;
+        }
+
+        button {
+            border: none; padding: 12px; border-radius: 8px;
+            font-size: 16px; font-weight: bold; color: white;
+            cursor: pointer; transition: transform 0.1s;
+        }
+        button:active { transform: scale(0.95); }
+        
+        .btn-start { background: #d32f2f; width: 100%; font-size: 18px; margin-top: 10px; }
+        .btn-opt { background: #0097a7; box-shadow: 0 4px 0 #006064; }
+        
+        #msg-feedback {
+            height: 30px; margin-top: 10px; font-weight: bold; font-size: 18px; color: #333;
+        }
+
+        @keyframes popIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        
+        /* Báo lỗi (Debug) */
+        #debug-log {
+            display: none; position: fixed; bottom: 0; left: 0; 
+            width: 100%; background: rgba(0,0,0,0.8); color: lime; 
+            font-size: 10px; padding: 5px; z-index: 9999;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="debug-log">Log: Ready</div>
+
+    <div id="layer-start">
+        <div class="input-box">
+            <h2 style="color:#006064; margin:0;">GÓC CỦA EM</h2>
+            <p style="color:#666; font-size:14px;">Game Toán Học Lớp 4</p>
+            <input type="text" id="inp-name" placeholder="Nhập tên con...">
+            <button class="btn-start" onclick="initGame()">VÀO HỌC NGAY ▶</button>
+        </div>
+    </div>
+
+    <div id="layer-game">
+        <div class="info-bar">
+            <span id="txt-name">HS: ...</span>
+            <span id="txt-score">Điểm: 0</span>
+        </div>
+        <div style="font-size:14px; color:#555; margin-bottom:5px;">Lượt: <span id="txt-turn">1</span>/5</div>
+        
+        <canvas id="gameCanvas" width="800" height="400"></canvas>
+        
+        <div id="msg-feedback">Kéo chấm đỏ để tạo góc...</div>
+
+        <div id="question-area">
+            <div style="font-size:18px; font-weight:bold; color:#333;">Góc <span style="color:red">xOy</span> là góc gì?</div>
+            <div class="btn-grid">
+                <button class="btn-opt" id="btn-nhon" onclick="checkAnswer('nhon')">A. Góc Nhọn</button>
+                <button class="btn-opt" id="btn-vuong" onclick="checkAnswer('vuong')">B. Góc Vuông</button>
+                <button class="btn-opt" id="btn-tu" onclick="checkAnswer('tu')">C. Góc Tù</button>
+                <button class="btn-opt" id="btn-bet" onclick="checkAnswer('bet')">D. Góc Bẹt</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // === 1. SYSTEM CORE (HỆ THỐNG CỐT LÕI) ===
+        // Bắt lỗi toàn cục để hiển thị lên màn hình thay vì crash ngầm
+        window.onerror = function(msg, url, line) {
+            const el = document.getElementById('debug-log');
+            el.style.display = 'block';
+            el.innerText = `Lỗi: ${msg} (Dòng ${line})`;
+            return false;
+        };
+
+        const config = {
+            rayLen: 300,
+            cx: 400, // Tọa độ Canvas gốc (Width / 2)
+            cy: 350,
+            handleRadius: 30 // Vùng chạm rộng hơn để dễ kéo trên mobile
+        };
+
+        let state = {
+            name: '',
+            score: 0,
+            turn: 1,
+            angle: 45,
+            isDragging: false,
+            canInteract: true,
+            audioCtx: null
+        };
+
+        // DOM Elements
+        const cvs = document.getElementById('gameCanvas');
+        const ctx = cvs.getContext('2d');
+        const uiStart = document.getElementById('layer-start');
+        const uiGame = document.getElementById('layer-game');
+        const uiQues = document.getElementById('question-area');
+        const uiFeed = document.getElementById('msg-feedback');
+
+        // === 2. AUDIO & VOICE SYSTEM (HỆ THỐNG ÂM THANH AN TOÀN) ===
+        
+        function initAudio() {
+            // Chỉ khởi tạo AudioContext sau khi người dùng bấm nút (User Gesture)
+            try {
+                if (!state.audioCtx) {
+                    state.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (state.audioCtx.state === 'suspended') {
+                    state.audioCtx.resume();
+                }
+            } catch (e) { console.warn("Audio not supported"); }
+        }
+
+        function playSound(type) {
+            if (!state.audioCtx) return;
+            try {
+                const osc = state.audioCtx.createOscillator();
+                const gain = state.audioCtx.createGain();
+                const now = state.audioCtx.currentTime;
+
+                if (type === 'tick') { // Tiếng rẹt rẹt
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(100, now);
+                    osc.frequency.exponentialRampToValueAtTime(0.01, now + 0.05);
+                    gain.gain.setValueAtTime(0.1, now);
+                } else if (type === 'win') { // Tiếng thắng
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(400, now);
+                    osc.frequency.linearRampToValueAtTime(800, now + 0.1);
+                    gain.gain.setValueAtTime(0.3, now);
+                } else { // Tiếng thua
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(200, now);
+                    osc.frequency.linearRampToValueAtTime(100, now + 0.2);
+                    gain.gain.setValueAtTime(0.2, now);
+                }
+
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                osc.connect(gain);
+                gain.connect(state.audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            } catch (e) {}
+        }
+
+        function speak(text) {
+            if (!('speechSynthesis' in window)) return;
+            window.speechSynthesis.cancel(); // Dừng câu cũ ngay lập tức
+            const u = new SpeechSynthesisUtterance(text);
+            u.lang = 'vi-VN'; 
+            u.rate = 1.0; 
+            window.speechSynthesis.speak(u);
+        }
+
+        // === 3. GAME LOGIC ===
+
+        function initGame() {
+            const name = document.getElementById('inp-name').value.trim();
+            state.name = name || "Bạn nhỏ";
+            
+            // Kích hoạt âm thanh ngay tại sự kiện click này
+            initAudio();
+
+            // Chuyển màn hình
+            uiStart.style.display = 'none';
+            uiGame.style.display = 'flex'; // Dùng flex để căn giữa
+            document.getElementById('txt-name').innerText = "HS: " + state.name;
+
+            draw();
+            speak(`Chào mừng ${state.name}. Hãy kéo chấm đỏ để bắt đầu.`);
+        }
+
+        function draw() {
+            // Xóa bảng
+            ctx.fillStyle = '#fafafa'; 
+            ctx.fillRect(0, 0, cvs.width, cvs.height);
+
+            // Vẽ Ox (Tia cố định)
+            ctx.beginPath(); 
+            ctx.moveTo(config.cx, config.cy); 
+            ctx.lineTo(config.cx + config.rayLen, config.cy);
+            ctx.lineWidth = 6; ctx.strokeStyle = '#455a64'; ctx.lineCap = 'round'; 
+            ctx.stroke();
+            ctx.fillStyle = '#455a64'; ctx.font = "bold 24px Arial"; 
+            ctx.fillText("x", config.cx + config.rayLen - 15, config.cy + 35);
+
+            // Tính toán Oy
+            const rad = -state.angle * (Math.PI / 180);
+            const ex = config.cx + config.rayLen * Math.cos(rad);
+            const ey = config.cy + config.rayLen * Math.sin(rad);
+
+            // Vẽ Oy (Tia di động)
+            ctx.beginPath(); 
+            ctx.moveTo(config.cx, config.cy); 
+            ctx.lineTo(ex, ey);
+            ctx.strokeStyle = '#d32f2f'; ctx.stroke();
+            ctx.fillStyle = '#d32f2f'; 
+            ctx.fillText("y", ex + 20 * Math.cos(rad), ey + 20 * Math.sin(rad));
+
+            // Vẽ Cung tròn góc
+            if (state.angle > 0) {
+                ctx.beginPath(); 
+                ctx.arc(config.cx, config.cy, 80, 0, rad, true);
+                ctx.strokeStyle = '#ffa000'; ctx.lineWidth = 3; ctx.setLineDash([5,5]);
+                ctx.stroke(); ctx.setLineDash([]);
+            }
+
+            // Số đo
+            ctx.fillStyle = "#00838f"; ctx.font = "bold 36px Arial";
+            ctx.fillText(state.angle + "°", config.cx + 50, config.cy - 60);
+
+            // Tâm O
+            ctx.beginPath(); ctx.arc(config.cx, config.cy, 8, 0, Math.PI*2);
+            ctx.fillStyle = '#263238'; ctx.fill();
+            ctx.font = "bold 20px Arial"; ctx.fillText("O", config.cx - 25, config.cy + 25);
+
+            // TAY NẮM (HANDLE) - CHỈ VẼ KHI ĐƯỢC TƯƠNG TÁC
+            if (state.canInteract) {
+                // Vị trí tay nắm nằm trên tia Oy
+                const hDist = 250; // Khoảng cách tay nắm so với tâm
+                const hx = config.cx + hDist * Math.cos(rad);
+                const hy = config.cy + hDist * Math.sin(rad);
+
+                // Vẽ vòng tròn bắt điểm (Invisible Hit Area) - Để debug thì cho màu nhạt, game thật thì trong suốt
+                ctx.beginPath(); ctx.arc(hx, hy, config.handleRadius, 0, Math.PI*2);
+                ctx.fillStyle = 'rgba(211, 47, 47, 0.1)'; ctx.fill();
+
+                // Vẽ điểm hiển thị
+                ctx.beginPath(); ctx.arc(hx, hy, 12, 0, Math.PI*2);
+                ctx.fillStyle = '#d32f2f'; ctx.fill();
+                ctx.lineWidth = 2; ctx.strokeStyle = 'white'; ctx.stroke();
+            }
+        }
+
+        // === 4. INPUT SYSTEM (HỆ THỐNG CẢM ỨNG CHUẨN XÁC) ===
+        
+        function getPointerPos(e) {
+            const rect = cvs.getBoundingClientRect();
+            // Lấy tọa độ Client (Mouse hoặc Touch đầu tiên)
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+            // Mapping tỷ lệ (QUAN TRỌNG NHẤT ĐỂ FIX LỖI MOBILE)
+            // Tọa độ Canvas = (Tọa độ màn hình - Lề Canvas) * (Độ phân giải Gốc / Kích thước hiển thị CSS)
+            return {
+                x: (clientX - rect.left) * (cvs.width / rect.width),
+                y: (clientY - rect.top) * (cvs.height / rect.height)
+            };
+        }
+
+        function onInputStart(e) {
+            if (!state.canInteract) return;
+            e.preventDefault(); // Chặn hành vi mặc định (zoom, scroll)
+            
+            const pos = getPointerPos(e);
+            // Kiểm tra xem có bấm trúng vùng tay nắm không? (Tính khoảng cách)
+            // Tính tia Oy hiện tại để biết tay nắm ở đâu
+            const rad = -state.angle * (Math.PI / 180);
+            const hDist = 250; 
+            const hx = config.cx + hDist * Math.cos(rad);
+            const hy = config.cy + hDist * Math.sin(rad);
+            
+            // Khoảng cách từ ngón tay đến tay nắm
+            const dist = Math.sqrt((pos.x - hx)**2 + (pos.y - hy)**2);
+
+            // Cho phép sai số 50px (rất dễ bấm)
+            if (dist < 50) {
+                state.isDragging = true;
+                uiQues.style.display = 'none';
+                uiFeed.innerText = "Đang kéo...";
+            }
+        }
+
+        function onInputMove(e) {
+            if (!state.isDragging) return;
+            e.preventDefault();
+
+            const pos = getPointerPos(e);
+            
+            // Tính góc dựa trên hàm atan2
+            const dx = pos.x - config.cx;
+            const dy = pos.y - config.cy;
+            let theta = Math.atan2(-dy, dx); // Đảo dấu dy vì trục Y Canvas ngược
+            let deg = Math.round(theta * 180 / Math.PI);
+
+            // Giới hạn 0 - 180
+            if (deg < 0) deg = 0;
+            if (deg > 180) deg = 180;
+
+            // Chỉ vẽ lại và phát tiếng nếu góc thay đổi
+            if (deg !== state.angle) {
+                if (Math.abs(deg - state.angle) > 2) playSound('tick'); // Âm thanh rẹt rẹt
+                state.angle = deg;
+                draw();
+            }
+        }
+
+        function onInputEnd(e) {
+            if (!state.isDragging) return;
+            state.isDragging = false;
+            
+            // Hiện bảng câu hỏi
+            uiQues.style.display = 'block';
+            uiFeed.innerText = "Góc trên là góc gì?";
+            speak(`Góc ${state.angle} độ là góc gì?`);
+        }
+
+        // Đăng ký sự kiện (Hỗ trợ cả Mouse và Touch đồng thời)
+        cvs.addEventListener('mousedown', onInputStart);
+        cvs.addEventListener('touchstart', onInputStart, {passive: false});
+
+        window.addEventListener('mousemove', onInputMove, {passive: false});
+        window.addEventListener('touchmove', onInputMove, {passive: false});
+
+        window.addEventListener('mouseup', onInputEnd);
+        window.addEventListener('touchend', onInputEnd);
+
+
+        // === 5. CHECK ANSWER LOGIC ===
+
+        function checkAnswer(choice) {
+            if (!state.canInteract) return;
+            state.canInteract = false; // Khóa tương tác
+
+            // Logic Toán học
+            let correct = 'unknown';
+            if (state.angle > 0 && state.angle < 90) correct = 'nhon';
+            else if (state.angle === 90) correct = 'vuong';
+            else if (state.angle > 90 && state.angle < 180) correct = 'tu';
+            else if (state.angle === 180) correct = 'bet';
+
+            // UI Feedback
+            const btn = document.getElementById('btn-' + choice);
+            const allBtns = document.querySelectorAll('.btn-opt');
+            allBtns.forEach(b => b.disabled = true); // Vô hiệu hóa nút
+
+            if (choice === correct) {
+                state.score += 10;
+                document.getElementById('txt-score').innerText = "Điểm: " + state.score;
+                uiFeed.innerHTML = "<span style='color:green'>CHÍNH XÁC! GIỎI QUÁ!</span>";
+                btn.style.background = "#2e7d32"; // Màu xanh đậm
+                playSound('win');
+                speak("Chính xác! Con giỏi lắm.");
+            } else {
+                uiFeed.innerHTML = `<span style='color:red'>SAI RỒI! ĐÓ LÀ GÓC ${getVNName(correct).toUpperCase()}</span>`;
+                btn.style.background = "#c62828"; // Màu đỏ
+                document.getElementById('btn-'+correct).style.background = "#2e7d32"; // Hiện đáp án đúng
+                playSound('lose');
+                speak("Sai rồi, tiếc quá.");
+            }
+
+            // Chuyển lượt sau 2.5 giây
+            setTimeout(nextTurn, 2500);
+        }
+
+        function getVNName(t) {
+            if(t=='nhon') return 'Nhọn';
+            if(t=='vuong') return 'Vuông';
+            if(t=='tu') return 'Tù';
+            if(t=='bet') return 'Bẹt';
+            return '?';
+        }
+
+        function nextTurn() {
+            if (state.turn >= 5) {
+                alert(`Kết thúc! Tổng điểm: ${state.score}/50`);
+                location.reload(); // Tải lại game
+                return;
+            }
+
+            state.turn++;
+            document.getElementById('txt-turn').innerText = state.turn;
+            
+            // Reset trạng thái
+            state.canInteract = true;
+            uiQues.style.display = 'none';
+            uiFeed.innerText = "Kéo góc tiếp theo...";
+            
+            // Reset các nút bấm
+            const allBtns = document.querySelectorAll('.btn-opt');
+            allBtns.forEach(b => {
+                b.disabled = false;
+                b.style.background = "#0097a7";
+            });
+
+            // Random góc mới
+            state.angle = Math.floor(Math.random() * 160) + 10;
+            draw();
+            speak("Mời con làm câu tiếp theo.");
+        }
+
+    </script>
+</body>
+</html>
