@@ -425,6 +425,42 @@
             }
             animate();
         }
+                // --- BIẾN TOÀN CỤC ĐỂ LƯU GIỌNG ---
+        let vnVoice = null;
+
+        // --- HÀM TẢI GIỌNG (CHẠY NGẦM) ---
+        function loadVoices() {
+            const voices = window.speechSynthesis.getVoices();
+            // Tìm giọng có chữ 'vi', 'VN', hoặc 'Vietnamese'
+            vnVoice = voices.find(v => v.lang.includes('vi') || v.lang.includes('VN'));
+            
+            // Nếu tìm thấy, in ra log để biết (dùng khi debug)
+            if (vnVoice) console.log("Đã tìm thấy giọng: " + vnVoice.name);
+        }
+
+        // Đợi trình duyệt nạp xong danh sách giọng thì mới tìm
+        if ('speechSynthesis' in window) {
+             window.speechSynthesis.onvoiceschanged = loadVoices;
+        }
+
+        // --- HÀM ĐỌC MỚI (THÔNG MINH HƠN) ---
+        function speak(text) {
+            if (!('speechSynthesis' in window)) return;
+            
+            // Nếu chưa có giọng, thử tìm lại lần nữa
+            if (!vnVoice) loadVoices();
+
+            window.speechSynthesis.cancel(); // Ngắt lời cũ
+            const u = new SpeechSynthesisUtterance(text);
+            u.lang = 'vi-VN'; // Cố định mã ngôn ngữ
+            
+            // Nếu tìm thấy giọng chị Google xịn thì dùng, không thì dùng mặc định
+            if (vnVoice) u.voice = vnVoice;
+            
+            u.rate = 1.0; // Tốc độ đọc
+            window.speechSynthesis.speak(u);
+        }
+
     </script>
 </body>
 </html>
