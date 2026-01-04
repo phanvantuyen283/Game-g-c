@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Phân loại góc minigame>Nhận>Nh
+    <title>Góc Của Em - Phiên Bản Cứu Hộ</title>
     <style>
         /* --- CSS CHUẨN HÓA --- */
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -17,6 +17,13 @@
             user-select: none;
         }
 
+        /* Bảng báo lỗi (Chỉ hiện khi code hỏng) */
+        #error-debug {
+            display: none; position: fixed; top: 0; left: 0; width: 100%;
+            background: #d32f2f; color: white; padding: 10px; z-index: 99999;
+            font-size: 12px; font-family: monospace; white-space: pre-wrap;
+        }
+
         .layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             display: none; flex-direction: column; 
@@ -25,7 +32,7 @@
 
         /* 1. START SCREEN */
         #layer-start {
-            display: flex; 
+            display: flex; /* Bắt buộc hiện lúc đầu */
             background: linear-gradient(135deg, #006064, #00838f);
             z-index: 50; color: white;
         }
@@ -102,6 +109,8 @@
 </head>
 <body>
 
+    <div id="error-debug"></div>
+
     <canvas id="confettiCanvas"></canvas>
 
     <div id="layer-start" class="layer">
@@ -148,13 +157,20 @@
     </div>
 
     <script>
-        // === 1. CẤU HÌNH ===
+        // --- 0. BỘ DÒ LỖI TỰ ĐỘNG (QUAN TRỌNG) ---
+        window.onerror = function(msg, url, line) {
+            const errDiv = document.getElementById('error-debug');
+            errDiv.style.display = 'block';
+            errDiv.innerText = `⚠️ LỖI: ${msg}\n👉 Dòng: ${line}`;
+            return false;
+        };
+
+        // --- 1. CẤU HÌNH ---
         const config = { rayLen: 260, cx: 300, cy: 380, handleRadius: 45 };
         let state = {
             name: 'Học sinh', score: 0, turn: 1, angle: 45,
             isDragging: false, canInteract: true, audioCtx: null
         };
-        // Biến lưu giọng đọc xịn
         let targetVoice = null; 
 
         const cvs = document.getElementById('gameCanvas');
@@ -165,29 +181,21 @@
         const uiQues = document.getElementById('question-area');
         const uiFeed = document.getElementById('msg-feedback');
 
-        // === 2. XỬ LÝ ÂM THANH & TÌM GIỌNG (UPDATED) ===
-        
-        // Hàm này sẽ chạy ngầm để tìm giọng tiếng Việt
+        // === 2. XỬ LÝ ÂM THANH ===
         function loadVoices() {
             if (!('speechSynthesis' in window)) return;
             const voices = window.speechSynthesis.getVoices();
-            // Ưu tiên tìm giọng có chữ "Google" và "Vietnam"
             targetVoice = voices.find(v => v.lang.includes('vi') && v.name.includes('Google'));
-            // Nếu không có Google, tìm bất cứ giọng nào có chữ 'vi'
             if (!targetVoice) targetVoice = voices.find(v => v.lang.includes('vi'));
         }
 
-        // Kích hoạt tìm giọng ngay khi trình duyệt sẵn sàng
-        if ('speechSynthesis' in window) {
-            window.speechSynthesis.onvoiceschanged = loadVoices;
-        }
+        if ('speechSynthesis' in window) window.speechSynthesis.onvoiceschanged = loadVoices;
 
         function initAudio() {
             try {
                 if (!state.audioCtx) state.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 if (state.audioCtx.state === 'suspended') state.audioCtx.resume();
-            } catch(e) {}
-            // Gọi lại loadVoices lần nữa khi bấm nút để chắc chắn
+            } catch(e) { console.warn("Audio Error:", e); }
             loadVoices(); 
         }
 
@@ -218,47 +226,38 @@
             } catch(e) {}
         }
 
-        // HÀM ĐỌC (UPDATED) - ÉP DÙNG VOICE OBJECT
         function speak(text) {
             if (!('speechSynthesis' in window)) return;
-            
-            // Nếu chưa tìm thấy giọng, thử tìm lại phát nữa
             if (!targetVoice) loadVoices();
-
-            window.speechSynthesis.cancel(); // Hủy câu cũ
+            window.speechSynthesis.cancel();
             const u = new SpeechSynthesisUtterance(text);
-            
-            // Gán cứng giọng tìm được
-            if (targetVoice) {
-                u.voice = targetVoice;
-                u.lang = targetVoice.lang; // Gán theo giọng tìm được
-            } else {
-                u.lang = 'vi-VN'; // Fallback nếu không tìm thấy
-            }
-            
+            if (targetVoice) { u.voice = targetVoice; u.lang = targetVoice.lang; } 
+            else { u.lang = 'vi-VN'; }
             u.rate = 1.0; 
             window.speechSynthesis.speak(u);
         }
 
-        // === 3. GAME LOGIC ===
+        // === 3. LOGIC GAME ===
         function initGame() {
-            const val = document.getElementById('inp-name').value.trim();
-            if (val) state.name = val;
-            
-            initAudio(); // Kích hoạt AudioContext
-            
-            uiStart.style.display = 'none';
-            uiGame.style.display = 'flex';
-            document.getElementById('txt-name').innerText = "HS: " + state.name;
-            draw();
-            
-            // Hack nhỏ: Đọc một khoảng trắng để kích hoạt engine giọng nói ngay lập tức
-            speak(" "); 
-            setTimeout(() => {
-                speak(`Chào mừng ${state.name}. Hãy kéo chấm đỏ.`);
-            }, 300);
+            try {
+                const val = document.getElementById('inp-name').value.trim();
+                if (val) state.name = val;
+                
+                initAudio();
+                uiStart.style.display = 'none';
+                uiGame.style.display = 'flex';
+                document.getElementById('txt-name').innerText = "HS: " + state.name;
+                
+                draw();
+                
+                // Kích hoạt giọng nói
+                speak(" "); 
+                setTimeout(() => speak(`Chào mừng ${state.name}. Hãy kéo chấm đỏ.`), 300);
 
-            uiFeed.innerText = "👇 Kéo chấm đỏ để tạo góc 👇";
+                uiFeed.innerText = "👇 Kéo chấm đỏ để tạo góc 👇";
+            } catch(err) {
+                alert("Lỗi khởi động: " + err);
+            }
         }
 
         function draw() {
@@ -295,7 +294,7 @@
             }
         }
 
-        // === 4. INPUT (FIXED) ===
+        // === 4. INPUT ===
         function getPos(e) {
             const rect = cvs.getBoundingClientRect();
             const cx = e.touches ? e.touches[0].clientX : e.clientX;
