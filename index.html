@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Góc Của Em - Phiên Bản Cứu Hộ</title>
+    <title>Góc Của Em - Phiên Bản Tương Thích</title>
     <style>
         /* --- CSS CHUẨN HÓA --- */
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -17,13 +17,16 @@
             user-select: none;
         }
 
-        /* Bảng báo lỗi (Chỉ hiện khi code hỏng) */
-        #error-debug {
-            display: none; position: fixed; top: 0; left: 0; width: 100%;
-            background: #d32f2f; color: white; padding: 10px; z-index: 99999;
-            font-size: 12px; font-family: monospace; white-space: pre-wrap;
+        /* Bảng Debug (Để chẩn đoán bệnh mất tiếng) */
+        #debug-console {
+            position: fixed; bottom: 0; left: 0; width: 100%;
+            background: rgba(0,0,0,0.8); color: #00ff00;
+            font-size: 10px; font-family: monospace;
+            padding: 5px; z-index: 9999; pointer-events: none;
+            height: 60px; overflow-y: scroll;
         }
 
+        /* LAYERS */
         .layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             display: none; flex-direction: column; 
@@ -32,8 +35,7 @@
 
         /* 1. START SCREEN */
         #layer-start {
-            display: flex; /* Bắt buộc hiện lúc đầu */
-            background: linear-gradient(135deg, #006064, #00838f);
+            display: flex; background: linear-gradient(135deg, #006064, #00838f);
             z-index: 50; color: white;
         }
         
@@ -49,10 +51,9 @@
         }
 
         .tuyen-brand {
-            position: absolute; bottom: 30px; width: 100%; text-align: center;
+            position: absolute; bottom: 65px; width: 100%; text-align: center;
             color: rgba(255, 255, 255, 0.7); font-size: 14px; font-style: italic;
             font-weight: 500; z-index: 60; pointer-events: none;
-            text-shadow: 0 1px 3px rgba(0,0,0,0.3);
         }
 
         /* 2. GAME SCREEN */
@@ -109,8 +110,7 @@
 </head>
 <body>
 
-    <div id="error-debug"></div>
-
+    <div id="debug-console">System ready...<br></div>
     <canvas id="confettiCanvas"></canvas>
 
     <div id="layer-start" class="layer">
@@ -157,48 +157,96 @@
     </div>
 
     <script>
-        // --- 0. BỘ DÒ LỖI TỰ ĐỘNG (QUAN TRỌNG) ---
-        window.onerror = function(msg, url, line) {
-            const errDiv = document.getElementById('error-debug');
-            errDiv.style.display = 'block';
-            errDiv.innerText = `⚠️ LỖI: ${msg}\n👉 Dòng: ${line}`;
-            return false;
+        // === 0. LOGGING SYSTEM (Để soi lỗi) ===
+        function log(msg) {
+            const c = document.getElementById('debug-console');
+            c.innerHTML += "> " + msg + "<br>";
+            c.scrollTop = c.scrollHeight;
+            console.log(msg);
+        }
+
+        window.onerror = function(msg) {
+            if(!msg.toString().includes('zalo') && !msg.toString().includes('ResizeObserver')) {
+                log("ERR: " + msg);
+            }
         };
 
-        // --- 1. CẤU HÌNH ---
+        // === 1. CẤU HÌNH ===
         const config = { rayLen: 260, cx: 300, cy: 380, handleRadius: 45 };
         let state = {
             name: 'Học sinh', score: 0, turn: 1, angle: 45,
             isDragging: false, canInteract: true, audioCtx: null
         };
-        let targetVoice = null; 
+        let myVoice = null; 
 
-        const cvs = document.getElementById('gameCanvas');
-        const ctx = cvs.getContext('2d');
-        const uiStart = document.getElementById('layer-start');
-        const uiGame = document.getElementById('layer-game');
-        const uiEnd = document.getElementById('layer-end');
-        const uiQues = document.getElementById('question-area');
-        const uiFeed = document.getElementById('msg-feedback');
-
-        // === 2. XỬ LÝ ÂM THANH ===
+        // === 2. HỆ THỐNG GIỌNG NÓI MẠNH MẼ (ROBUST VOICE) ===
+        
         function loadVoices() {
-            if (!('speechSynthesis' in window)) return;
+            if (!('speechSynthesis' in window)) {
+                log("Máy này không hỗ trợ giọng nói!");
+                return;
+            }
             const voices = window.speechSynthesis.getVoices();
-            targetVoice = voices.find(v => v.lang.includes('vi') && v.name.includes('Google'));
-            if (!targetVoice) targetVoice = voices.find(v => v.lang.includes('vi'));
+            log(`Đã tải được: ${voices.length} giọng.`);
+            
+            // Chiến thuật tìm giọng:
+            // 1. Tìm giọng có mã 'vi-VN' chuẩn.
+            myVoice = voices.find(v => v.lang === 'vi-VN');
+            
+            // 2. Nếu không có, tìm giọng chứa chữ 'vi' hoặc 'Vietnamese'.
+            if (!myVoice) myVoice = voices.find(v => v.lang.includes('vi') || v.name.includes('Vietnamese'));
+
+            if (myVoice) {
+                log(`Đã chọn giọng: ${myVoice.name} (${myVoice.lang})`);
+            } else {
+                log("Chưa tìm thấy giọng Việt, sẽ dùng mặc định.");
+            }
         }
 
-        if ('speechSynthesis' in window) window.speechSynthesis.onvoiceschanged = loadVoices;
+        // Ép trình duyệt tải giọng liên tục
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.onvoiceschanged = loadVoices;
+            // Thử tải ngay lập tức
+            loadVoices();
+            // Đề phòng trình duyệt lười, cứ 0.5s nhắc tải lại một lần cho đến khi có giọng
+            let loadInterval = setInterval(() => {
+                if(window.speechSynthesis.getVoices().length > 0) {
+                    loadVoices();
+                    clearInterval(loadInterval);
+                }
+            }, 500);
+        }
 
         function initAudio() {
+            // Audio Context (Tiếng rẹt rẹt)
             try {
                 if (!state.audioCtx) state.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 if (state.audioCtx.state === 'suspended') state.audioCtx.resume();
-            } catch(e) { console.warn("Audio Error:", e); }
-            loadVoices(); 
+                log("AudioContext OK");
+            } catch(e) { log("Lỗi AudioContext"); }
         }
 
+        function speak(text) {
+            if (!('speechSynthesis' in window)) return;
+            
+            // Hủy câu đang đọc dở (Quan trọng trên Android)
+            window.speechSynthesis.cancel();
+
+            const u = new SpeechSynthesisUtterance(text);
+            
+            // Gán giọng (Nếu tìm được thì gán, không thì để OS tự quyết)
+            if (myVoice) u.voice = myVoice;
+            u.lang = 'vi-VN'; // Luôn set lang để fallback
+            u.rate = 1.0; 
+
+            // Theo dõi trạng thái đọc
+            u.onstart = () => log("Đang đọc: " + text.substring(0, 10) + "...");
+            u.onerror = (e) => log("Lỗi đọc: " + e.error);
+
+            window.speechSynthesis.speak(u);
+        }
+
+        // Các hàm âm thanh hiệu ứng
         function playTickSound() {
             if (!state.audioCtx) return;
             try {
@@ -226,38 +274,39 @@
             } catch(e) {}
         }
 
-        function speak(text) {
-            if (!('speechSynthesis' in window)) return;
-            if (!targetVoice) loadVoices();
-            window.speechSynthesis.cancel();
-            const u = new SpeechSynthesisUtterance(text);
-            if (targetVoice) { u.voice = targetVoice; u.lang = targetVoice.lang; } 
-            else { u.lang = 'vi-VN'; }
-            u.rate = 1.0; 
-            window.speechSynthesis.speak(u);
-        }
-
         // === 3. LOGIC GAME ===
+        const cvs = document.getElementById('gameCanvas');
+        const ctx = cvs.getContext('2d');
+        const uiStart = document.getElementById('layer-start');
+        const uiGame = document.getElementById('layer-game');
+        const uiEnd = document.getElementById('layer-end');
+        const uiQues = document.getElementById('question-area');
+        const uiFeed = document.getElementById('msg-feedback');
+
         function initGame() {
             try {
                 const val = document.getElementById('inp-name').value.trim();
                 if (val) state.name = val;
                 
                 initAudio();
+                
                 uiStart.style.display = 'none';
                 uiGame.style.display = 'flex';
                 document.getElementById('txt-name').innerText = "HS: " + state.name;
                 
                 draw();
                 
-                // Kích hoạt giọng nói
-                speak(" "); 
-                setTimeout(() => speak(`Chào mừng ${state.name}. Hãy kéo chấm đỏ.`), 300);
+                // MỒI GIỌNG NÓI (QUAN TRỌNG NHẤT)
+                // Ép đọc ngay lập tức trong sự kiện click
+                log("Kích hoạt giọng nói...");
+                speak(" "); // Đọc ký tự rỗng để khởi động engine
+                
+                setTimeout(() => {
+                    speak(`Chào ${state.name}. Kéo chấm đỏ đi.`);
+                }, 500);
 
                 uiFeed.innerText = "👇 Kéo chấm đỏ để tạo góc 👇";
-            } catch(err) {
-                alert("Lỗi khởi động: " + err);
-            }
+            } catch(err) { log("Lỗi Init: " + err); }
         }
 
         function draw() {
@@ -273,14 +322,14 @@
             ctx.beginPath(); ctx.moveTo(config.cx, config.cy); ctx.lineTo(ex, ey);
             ctx.strokeStyle = '#d32f2f'; ctx.stroke();
             ctx.fillStyle = '#d32f2f'; ctx.fillText("y", ex + 20*Math.cos(rad), ey + 20*Math.sin(rad));
-            // Cung tròn
+            // Cung
             if (state.angle > 0) {
                 ctx.beginPath(); ctx.arc(config.cx, config.cy, 80, 0, rad, true);
                 ctx.strokeStyle = '#ffa000'; ctx.lineWidth = 4; ctx.setLineDash([8,6]); ctx.stroke(); ctx.setLineDash([]);
             }
-            // Số đo
+            // Số
             ctx.fillStyle = "#00838f"; ctx.font = "bold 45px Arial"; ctx.fillText(state.angle + "°", config.cx + 50, config.cy - 80);
-            // Tâm O
+            // Tâm
             ctx.beginPath(); ctx.arc(config.cx, config.cy, 10, 0, Math.PI*2); ctx.fillStyle = '#263238'; ctx.fill();
             ctx.font = "bold 24px Arial"; ctx.fillText("O", config.cx - 30, config.cy + 30);
             // Handle
@@ -336,7 +385,7 @@
             state.isDragging = false;
             uiQues.style.display = 'block';
             uiFeed.innerText = "Góc này là góc gì?";
-            speak(`Góc ${state.angle} độ là góc gì?`);
+            speak(`Góc ${state.angle} độ.`);
             setTimeout(() => uiQues.scrollIntoView({behavior:"smooth"}), 100);
         }
 
@@ -361,12 +410,12 @@
                 document.getElementById('txt-score').innerText = "Điểm: " + state.score;
                 uiFeed.innerHTML = "<span style='color:green'>CHÍNH XÁC!</span>";
                 btn.style.background = "#2e7d32";
-                playWinSound(); speak("Chính xác! Con giỏi lắm.");
+                playWinSound(); speak("Đúng rồi!");
             } else {
                 uiFeed.innerHTML = "<span style='color:red'>SAI RỒI!</span>";
                 btn.style.background = "#c62828";
                 document.getElementById('btn-'+correct).style.background = "#2e7d32";
-                speak("Sai rồi, tiếc quá.");
+                speak("Sai rồi.");
             }
             setTimeout(nextTurn, 2500);
         }
@@ -381,7 +430,7 @@
             document.querySelectorAll('.btn-opt').forEach(b => { b.disabled = false; b.style.background = "#0097a7"; });
             state.angle = Math.floor(Math.random() * 160) + 10;
             draw();
-            speak("Mời con làm câu tiếp theo.");
+            speak("Tiếp tục nào.");
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
@@ -389,7 +438,7 @@
             uiGame.style.display = 'none'; uiEnd.style.display = 'flex';
             document.getElementById('end-score').innerText = state.score;
             document.getElementById('end-msg').innerText = `Chúc mừng ${state.name}!`;
-            speak(`Chúc mừng bạn ${state.name} đã hoàn thành với số điểm là ${state.score} điểm.`);
+            speak(`Chúc mừng ${state.name} đã hoàn thành.`);
             startConfetti();
         }
 
