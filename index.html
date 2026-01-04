@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Góc Của Em - Tuyen Trainer (Final Fix)</title>
+    <title>Góc Của Em - Tuyen Trainer (Voice Fixed)</title>
     <style>
-        /* --- CSS CHUẨN HÓA (Mobile First) --- */
+        /* --- CSS CHUẨN HÓA --- */
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         
         body {
@@ -17,14 +17,13 @@
             user-select: none;
         }
 
-        /* --- LAYERS --- */
         .layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             display: none; flex-direction: column; 
             align-items: center; justify-content: center;
         }
 
-        /* 1. Màn hình Chào */
+        /* 1. START SCREEN */
         #layer-start {
             display: flex; 
             background: linear-gradient(135deg, #006064, #00838f);
@@ -42,7 +41,6 @@
             border: 2px solid #00acc1; border-radius: 10px; text-align: center; outline: none;
         }
 
-        /* THƯƠNG HIỆU */
         .tuyen-brand {
             position: absolute; bottom: 30px; width: 100%; text-align: center;
             color: rgba(255, 255, 255, 0.7); font-size: 14px; font-style: italic;
@@ -50,7 +48,7 @@
             text-shadow: 0 1px 3px rgba(0,0,0,0.3);
         }
 
-        /* 2. Màn hình Game */
+        /* 2. GAME SCREEN */
         #layer-game { background: #e0f7fa; padding-top: 10px; justify-content: flex-start; z-index: 10; }
 
         .info-bar {
@@ -65,7 +63,7 @@
             max-width: 95vw; height: auto;
         }
 
-        /* 3. Màn hình Kết thúc */
+        /* 3. END SCREEN */
         #layer-end { background: rgba(255, 255, 255, 0.98); z-index: 100; }
         
         canvas#confettiCanvas {
@@ -73,7 +71,7 @@
             pointer-events: none; z-index: 90;
         }
 
-        /* Nút bấm */
+        /* BUTTONS */
         .btn-main { 
             background: #d32f2f; color: white; border: none; padding: 15px; width: 100%;
             font-size: 18px; font-weight: bold; border-radius: 50px; 
@@ -122,9 +120,7 @@
             <span id="txt-score">Điểm: 0</span>
         </div>
         <div style="font-size:14px; color:#555; margin-bottom:5px;">Lượt: <span id="txt-turn">1</span>/5</div>
-        
         <canvas id="gameCanvas" width="600" height="450"></canvas>
-        
         <div id="msg-feedback"></div>
 
         <div id="question-area">
@@ -152,34 +148,47 @@
     </div>
 
     <script>
-        // === 1. CẤU HÌNH (Đã tăng độ dài) ===
-        const config = { 
-            rayLen: 260, // Tăng từ 210 lên 260 (Dài hơn ~25%)
-            cx: 300,     // Tâm X
-            cy: 380,     // Tâm Y
-            handleRadius: 45
-        };
-        
+        // === 1. CẤU HÌNH ===
+        const config = { rayLen: 260, cx: 300, cy: 380, handleRadius: 45 };
         let state = {
             name: 'Học sinh', score: 0, turn: 1, angle: 45,
             isDragging: false, canInteract: true, audioCtx: null
         };
+        // Biến lưu giọng đọc xịn
+        let targetVoice = null; 
 
         const cvs = document.getElementById('gameCanvas');
         const ctx = cvs.getContext('2d');
-        
         const uiStart = document.getElementById('layer-start');
         const uiGame = document.getElementById('layer-game');
         const uiEnd = document.getElementById('layer-end');
         const uiQues = document.getElementById('question-area');
         const uiFeed = document.getElementById('msg-feedback');
 
-        // === 2. ÂM THANH ===
+        // === 2. XỬ LÝ ÂM THANH & TÌM GIỌNG (UPDATED) ===
+        
+        // Hàm này sẽ chạy ngầm để tìm giọng tiếng Việt
+        function loadVoices() {
+            if (!('speechSynthesis' in window)) return;
+            const voices = window.speechSynthesis.getVoices();
+            // Ưu tiên tìm giọng có chữ "Google" và "Vietnam"
+            targetVoice = voices.find(v => v.lang.includes('vi') && v.name.includes('Google'));
+            // Nếu không có Google, tìm bất cứ giọng nào có chữ 'vi'
+            if (!targetVoice) targetVoice = voices.find(v => v.lang.includes('vi'));
+        }
+
+        // Kích hoạt tìm giọng ngay khi trình duyệt sẵn sàng
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.onvoiceschanged = loadVoices;
+        }
+
         function initAudio() {
             try {
                 if (!state.audioCtx) state.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 if (state.audioCtx.state === 'suspended') state.audioCtx.resume();
             } catch(e) {}
+            // Gọi lại loadVoices lần nữa khi bấm nút để chắc chắn
+            loadVoices(); 
         }
 
         function playTickSound() {
@@ -209,92 +218,99 @@
             } catch(e) {}
         }
 
+        // HÀM ĐỌC (UPDATED) - ÉP DÙNG VOICE OBJECT
         function speak(text) {
             if (!('speechSynthesis' in window)) return;
-            window.speechSynthesis.cancel();
+            
+            // Nếu chưa tìm thấy giọng, thử tìm lại phát nữa
+            if (!targetVoice) loadVoices();
+
+            window.speechSynthesis.cancel(); // Hủy câu cũ
             const u = new SpeechSynthesisUtterance(text);
-            u.lang = 'vi-VN'; window.speechSynthesis.speak(u);
+            
+            // Gán cứng giọng tìm được
+            if (targetVoice) {
+                u.voice = targetVoice;
+                u.lang = targetVoice.lang; // Gán theo giọng tìm được
+            } else {
+                u.lang = 'vi-VN'; // Fallback nếu không tìm thấy
+            }
+            
+            u.rate = 1.0; 
+            window.speechSynthesis.speak(u);
         }
 
         // === 3. GAME LOGIC ===
         function initGame() {
             const val = document.getElementById('inp-name').value.trim();
             if (val) state.name = val;
-            initAudio();
+            
+            initAudio(); // Kích hoạt AudioContext
+            
             uiStart.style.display = 'none';
             uiGame.style.display = 'flex';
             document.getElementById('txt-name').innerText = "HS: " + state.name;
             draw();
-            speak(`Chào mừng ${state.name}. Hãy kéo chấm đỏ.`);
+            
+            // Hack nhỏ: Đọc một khoảng trắng để kích hoạt engine giọng nói ngay lập tức
+            speak(" "); 
+            setTimeout(() => {
+                speak(`Chào mừng ${state.name}. Hãy kéo chấm đỏ.`);
+            }, 300);
+
             uiFeed.innerText = "👇 Kéo chấm đỏ để tạo góc 👇";
         }
 
         function draw() {
             ctx.fillStyle = '#fafafa'; ctx.fillRect(0, 0, cvs.width, cvs.height);
-
-            // 1. Ox
+            // Ox
             ctx.beginPath(); ctx.moveTo(config.cx, config.cy); ctx.lineTo(config.cx + config.rayLen, config.cy);
             ctx.lineWidth = 6; ctx.strokeStyle = '#455a64'; ctx.lineCap = 'round'; ctx.stroke();
             ctx.fillStyle = '#455a64'; ctx.font = "bold 24px Arial"; ctx.fillText("x", config.cx + config.rayLen - 15, config.cy + 35);
-
-            // 2. Oy
+            // Oy
             const rad = -state.angle * (Math.PI / 180);
             const ex = config.cx + config.rayLen * Math.cos(rad);
             const ey = config.cy + config.rayLen * Math.sin(rad);
             ctx.beginPath(); ctx.moveTo(config.cx, config.cy); ctx.lineTo(ex, ey);
             ctx.strokeStyle = '#d32f2f'; ctx.stroke();
             ctx.fillStyle = '#d32f2f'; ctx.fillText("y", ex + 20*Math.cos(rad), ey + 20*Math.sin(rad));
-
-            // 3. Cung tròn
+            // Cung tròn
             if (state.angle > 0) {
                 ctx.beginPath(); ctx.arc(config.cx, config.cy, 80, 0, rad, true);
                 ctx.strokeStyle = '#ffa000'; ctx.lineWidth = 4; ctx.setLineDash([8,6]); ctx.stroke(); ctx.setLineDash([]);
             }
-
-            // 4. Số đo
+            // Số đo
             ctx.fillStyle = "#00838f"; ctx.font = "bold 45px Arial"; ctx.fillText(state.angle + "°", config.cx + 50, config.cy - 80);
-
-            // 5. Tâm O
+            // Tâm O
             ctx.beginPath(); ctx.arc(config.cx, config.cy, 10, 0, Math.PI*2); ctx.fillStyle = '#263238'; ctx.fill();
             ctx.font = "bold 24px Arial"; ctx.fillText("O", config.cx - 30, config.cy + 30);
-
-            // 6. Tay nắm (Handle)
+            // Handle
             if (state.canInteract) {
                 const handleDist = config.rayLen - 20; 
                 const hx = config.cx + handleDist * Math.cos(rad);
                 const hy = config.cy + handleDist * Math.sin(rad);
-                
-                // Vùng bóng mờ
                 ctx.beginPath(); ctx.arc(hx, hy, 30, 0, Math.PI*2); ctx.fillStyle = 'rgba(211,47,47,0.2)'; ctx.fill();
-                // Điểm chính
                 ctx.beginPath(); ctx.arc(hx, hy, 14, 0, Math.PI*2); ctx.fillStyle = '#d32f2f'; ctx.fill(); 
                 ctx.strokeStyle = 'white'; ctx.lineWidth=3; ctx.stroke();
             }
         }
 
-        // === 4. XỬ LÝ CẢM ỨNG (QUAN TRỌNG: FIX LỖI 180 -> 0) ===
+        // === 4. INPUT (FIXED) ===
         function getPos(e) {
             const rect = cvs.getBoundingClientRect();
             const cx = e.touches ? e.touches[0].clientX : e.clientX;
             const cy = e.touches ? e.touches[0].clientY : e.clientY;
-            return {
-                x: (cx - rect.left) * (cvs.width / rect.width),
-                y: (cy - rect.top) * (cvs.height / rect.height)
-            };
+            return { x: (cx - rect.left) * (cvs.width / rect.width), y: (cy - rect.top) * (cvs.height / rect.height) };
         }
 
         function onStart(e) {
             if (!state.canInteract) return;
             e.preventDefault();
             const p = getPos(e);
-            
             const rad = -state.angle * (Math.PI / 180);
-            const handleDist = config.rayLen - 20;
-            const hx = config.cx + handleDist * Math.cos(rad);
-            const hy = config.cy + handleDist * Math.sin(rad);
-            
-            const dist = Math.sqrt((p.x - hx)**2 + (p.y - hy)**2);
-            if (dist < 80) { 
+            const hx = config.cx + (config.rayLen - 20) * Math.cos(rad);
+            const hy = config.cy + (config.rayLen - 20) * Math.sin(rad);
+            if (Math.sqrt((p.x - hx)**2 + (p.y - hy)**2) < 80) { 
                 state.isDragging = true;
                 uiQues.style.display = 'none';
                 uiFeed.innerText = "Đang mở góc...";
@@ -305,26 +321,10 @@
             if (!state.isDragging) return;
             e.preventDefault();
             const p = getPos(e);
-            
-            const dx = p.x - config.cx;
-            const dy = p.y - config.cy;
-            
-            // Tính toán góc thô
-            let theta = Math.atan2(-dy, dx); 
-            let deg = Math.round(theta * 180 / Math.PI);
-
-            // === FIX LỖI 180 ĐỘ ===
-            // Nếu kéo xuống dưới đường ngang (y > cy), góc sẽ bị âm.
-            // Nếu ở bên trái (dx < 0) mà bị âm -> Nghĩa là kéo quá 180 độ một chút -> Ép về 180.
-            // Nếu ở bên phải (dx > 0) mà bị âm -> Nghĩa là kéo quá 0 độ một chút -> Ép về 0.
-            if (deg < 0) {
-                if (dx < 0) deg = 180; // Bên trái
-                else deg = 0;          // Bên phải
-            }
-
-            // Chặn trên dưới chắc chắn
+            const dx = p.x - config.cx; const dy = p.y - config.cy;
+            let deg = Math.round(Math.atan2(-dy, dx) * 180 / Math.PI);
+            if (deg < 0) { if (dx < 0) deg = 180; else deg = 0; }
             if (deg > 180) deg = 180;
-
             if (deg !== state.angle) {
                 if (Math.abs(deg - state.angle) >= 1) playTickSound(); 
                 state.angle = deg;
@@ -349,27 +349,25 @@
         function checkAnswer(choice) {
             if (!state.canInteract) return;
             state.canInteract = false;
-            
             let correct = '';
             if (state.angle > 0 && state.angle < 90) correct = 'nhon';
             else if (state.angle === 90) correct = 'vuong';
             else if (state.angle > 90 && state.angle < 180) correct = 'tu';
             else if (state.angle === 180) correct = 'bet';
-
+            
             document.querySelectorAll('.btn-opt').forEach(b => b.disabled = true);
             const btn = document.getElementById('btn-' + choice);
-
             if (choice === correct) {
                 state.score += 10;
                 document.getElementById('txt-score').innerText = "Điểm: " + state.score;
                 uiFeed.innerHTML = "<span style='color:green'>CHÍNH XÁC!</span>";
                 btn.style.background = "#2e7d32";
-                playWinSound(); speak("Chính xác!");
+                playWinSound(); speak("Chính xác! Con giỏi lắm.");
             } else {
                 uiFeed.innerHTML = "<span style='color:red'>SAI RỒI!</span>";
                 btn.style.background = "#c62828";
                 document.getElementById('btn-'+correct).style.background = "#2e7d32";
-                speak("Sai rồi.");
+                speak("Sai rồi, tiếc quá.");
             }
             setTimeout(nextTurn, 2500);
         }
@@ -384,23 +382,20 @@
             document.querySelectorAll('.btn-opt').forEach(b => { b.disabled = false; b.style.background = "#0097a7"; });
             state.angle = Math.floor(Math.random() * 160) + 10;
             draw();
-            speak("Câu tiếp theo.");
+            speak("Mời con làm câu tiếp theo.");
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
-        // === 6. END GAME ===
         function endGame() {
-            uiGame.style.display = 'none';
-            uiEnd.style.display = 'flex';
+            uiGame.style.display = 'none'; uiEnd.style.display = 'flex';
             document.getElementById('end-score').innerText = state.score;
             document.getElementById('end-msg').innerText = `Chúc mừng ${state.name}!`;
-            speak(`Chúc mừng bạn ${state.name} đã hoàn thành.`);
+            speak(`Chúc mừng bạn ${state.name} đã hoàn thành với số điểm là ${state.score} điểm.`);
             startConfetti();
         }
 
         function startConfetti() {
-            const cc = document.getElementById('confettiCanvas');
-            const cCtx = cc.getContext('2d');
+            const cc = document.getElementById('confettiCanvas'); const cCtx = cc.getContext('2d');
             cc.width = window.innerWidth; cc.height = window.innerHeight;
             let particles = [];
             const colors = ['#f44336', '#2196f3', '#ffeb3b', '#4caf50', '#ff9800'];
@@ -416,51 +411,13 @@
                 particles.forEach(p => {
                     p.y += p.speed; p.angle += 2;
                     if(p.y > cc.height) p.y = -20;
-                    cCtx.save();
-                    cCtx.translate(p.x, p.y); cCtx.rotate(p.angle * Math.PI/180);
-                    cCtx.fillStyle = p.color; cCtx.fillRect(-p.size/2, -p.size/2, p.size, p.size);
-                    cCtx.restore();
+                    cCtx.save(); cCtx.translate(p.x, p.y); cCtx.rotate(p.angle * Math.PI/180);
+                    cCtx.fillStyle = p.color; cCtx.fillRect(-p.size/2, -p.size/2, p.size, p.size); cCtx.restore();
                 });
                 requestAnimationFrame(animate);
             }
             animate();
         }
-                // --- BIẾN TOÀN CỤC ĐỂ LƯU GIỌNG ---
-        let vnVoice = null;
-
-        // --- HÀM TẢI GIỌNG (CHẠY NGẦM) ---
-        function loadVoices() {
-            const voices = window.speechSynthesis.getVoices();
-            // Tìm giọng có chữ 'vi', 'VN', hoặc 'Vietnamese'
-            vnVoice = voices.find(v => v.lang.includes('vi') || v.lang.includes('VN'));
-            
-            // Nếu tìm thấy, in ra log để biết (dùng khi debug)
-            if (vnVoice) console.log("Đã tìm thấy giọng: " + vnVoice.name);
-        }
-
-        // Đợi trình duyệt nạp xong danh sách giọng thì mới tìm
-        if ('speechSynthesis' in window) {
-             window.speechSynthesis.onvoiceschanged = loadVoices;
-        }
-
-        // --- HÀM ĐỌC MỚI (THÔNG MINH HƠN) ---
-        function speak(text) {
-            if (!('speechSynthesis' in window)) return;
-            
-            // Nếu chưa có giọng, thử tìm lại lần nữa
-            if (!vnVoice) loadVoices();
-
-            window.speechSynthesis.cancel(); // Ngắt lời cũ
-            const u = new SpeechSynthesisUtterance(text);
-            u.lang = 'vi-VN'; // Cố định mã ngôn ngữ
-            
-            // Nếu tìm thấy giọng chị Google xịn thì dùng, không thì dùng mặc định
-            if (vnVoice) u.voice = vnVoice;
-            
-            u.rate = 1.0; // Tốc độ đọc
-            window.speechSynthesis.speak(u);
-        }
-
     </script>
 </body>
 </html>
